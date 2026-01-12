@@ -1,10 +1,18 @@
 const express = require('express');
 const Salle = require('../models/salle');
 
+// ✅ Ajoute ton middleware d'auth si tu l'as (recommandé)
+// Si ton fichier s'appelle autrement, adapte le chemin.
+const requireAuth = require('../middleware/requireAuth');
+
 const router = express.Router();
+
+// ✅ Protéger toutes les routes salles (sinon impossible de vérifier qui libère)
+router.use(requireAuth);
 
 /**
  * POST /api/salle
+ * (Optionnel) tu peux garder si tu crées des salles via l’API
  */
 router.post('/salle', async (req, res) => {
   try {
@@ -53,13 +61,12 @@ router.get('/salle', async (_req, res) => {
   }
 });
 
-
 /**
  * GET /api/salle/:id
  */
 router.get('/salle/:id', async (req, res) => {
   try {
-    const salle = await Salle.findById(req.params.id);
+    const salle = await Salle.findById(req.params.id).populate('reservator', 'username');
     if (!salle) return res.status(404).json({ message: 'Salle non trouvée' });
     return res.status(200).json(salle);
   } catch (err) {
@@ -70,13 +77,32 @@ router.get('/salle/:id', async (req, res) => {
 
 /**
  * PATCH /api/salle/:id
+ * - reservee=false : libérer (SEULEMENT le réservateur)
+ * - reservee=true  : réserver
  */
 router.patch('/salle/:id', async (req, res) => {
   try {
     const { reservee, reservator, jour_choisi, heure_debut, heure_fin } = req.body || {};
 
-    // 1) Si on libère : on remet tout à null
+    const me = req.user?.id?.toString();
+    if (!me) return res.status(401).json({ message: 'Non authentifié' });
+
+    // 1) LIBÉRER : seul le réservateur peut libérer
     if (reservee === false) {
+      const salleCurrent = await Salle.findById(req.params.id);
+      if (!salleCurrent) return res.status(404).json({ message: 'Salle non trouvée' });
+
+      // si déjà libre => OK (idempotent)
+      if (!salleCurrent.reservee) {
+        const populated = await Salle.findById(req.params.id).populate('reservator', 'username');
+        return res.status(200).json(populated);
+      }
+
+      const reservatorId = salleCurrent.reservator?.toString();
+      if (!reservatorId || reservatorId !== me) {
+        return res.status(403).json({ message: 'Seul le réservateur peut libérer cette salle' });
+      }
+
       const salle = await Salle.findByIdAndUpdate(
         req.params.id,
         {
@@ -87,18 +113,16 @@ router.patch('/salle/:id', async (req, res) => {
           heure_fin: null,
         },
         { new: true, runValidators: true }
-      );
+      ).populate('reservator', 'username');
 
-      if (!salle) return res.status(404).json({ message: 'Salle non trouvée' });
       return res.status(200).json(salle);
     }
 
-    // 2) Si on réserve : tous les champs doivent être là
+    // 2) RÉSERVER : on force reservator = user connecté (plus fiable que le front)
     if (reservee !== true) {
       return res.status(400).json({ message: 'reservee doit être true ou false' });
     }
 
-    if (!reservator) return res.status(400).json({ message: 'reservator requis' });
     if (!jour_choisi) return res.status(400).json({ message: 'jour_choisi requis' });
     if (!heure_debut || !heure_fin) return res.status(400).json({ message: 'heure_debut et heure_fin requis' });
 
@@ -123,26 +147,31 @@ router.patch('/salle/:id', async (req, res) => {
       return res.status(400).json({ message: 'jour_choisi invalide' });
     }
 
+    // Optionnel : empêcher de réserver une salle déjà réservée par quelqu'un d'autre
+    const current = await Salle.findById(req.params.id);
+    if (!current) return res.status(404).json({ message: 'Salle non trouvée' });
+    if (current.reservee && current.reservator?.toString() !== me) {
+      return res.status(409).json({ message: 'Salle déjà réservée' });
+    }
+
     const salle = await Salle.findByIdAndUpdate(
       req.params.id,
       {
         reservee: true,
-        reservator,
+        reservator: me, // ✅ on ignore reservator du front
         jour_choisi: date,
         heure_debut,
         heure_fin,
       },
       { new: true, runValidators: true }
-    );
+    ).populate('reservator', 'username');
 
-    if (!salle) return res.status(404).json({ message: 'Salle non trouvée' });
     return res.status(200).json(salle);
   } catch (err) {
     console.error('Erreur PATCH /salle/:id :', err);
     return res.status(500).json({ message: 'Erreur serveur' });
   }
 });
-
 
 /**
  * DELETE /api/salle/:id
