@@ -42,13 +42,17 @@ router.post('/salle', async (req, res) => {
  */
 router.get('/salle', async (_req, res) => {
   try {
-    const salles = await Salle.find().sort({ salleName: 1 });
+    const salles = await Salle.find()
+      .populate('reservator', 'username')
+      .sort({ salleName: 1 });
+
     return res.status(200).json(salles);
   } catch (err) {
     console.error('Erreur GET /salle :', err);
     return res.status(500).json({ message: 'Erreur serveur' });
   }
 });
+
 
 /**
  * GET /api/salle/:id

@@ -179,7 +179,12 @@ export default function Salles() {
                   <tr key={id}>
                     <td>{s.salleName}</td>
                     <td>{s.reservee ? 'Oui' : 'Non'}</td>
-                    <td>{s.reservator ? String(s.reservator) : '-'}</td>
+                    <td>
+                      {s.reservator
+                        ? (typeof s.reservator === 'object' ? (s.reservator.username || s.reservator._id) : String(s.reservator))
+                        : '-'}
+                    </td>
+
                     <td>{s.jour_choisi ? new Date(s.jour_choisi).toLocaleDateString() : '-'}</td>
                     <td>{s.heure_debut && s.heure_fin ? `${s.heure_debut} → ${s.heure_fin}` : '-'}</td>
                     <td>
