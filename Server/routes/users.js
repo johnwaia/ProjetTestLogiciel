@@ -30,34 +30,41 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password } = req.body || {};
 
     if (!username || !password) {
-      return res.status(400).json({ message: 'username et password sont requis' });
+      return res.status(400).json({ message: 'username et password requis' });
     }
 
     const user = await User.findOne({ username });
-    if (!user) return res.status(401).json({ message: 'Identifiants invalides' });
+    if (!user) {
+      return res.status(401).json({ message: 'Identifiants invalides' });
+    }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ message: 'Identifiants invalides' });
+    if (!ok) {
+      return res.status(401).json({ message: 'Identifiants invalides' });
+    }
 
     const token = jwt.sign(
-      { id: user._id.toString(), username: user.username },
+      { id: user._id, username: user.username },
       process.env.JWT_SECRET,
-      { expiresIn: '1d' }
+      { expiresIn: '1h' }
     );
 
-    res.json({
-      user: { _id: user._id, username: user.username },
-      token
+    // ✅ UNE SEULE réponse
+    return res.status(200).json({
+      token,
+      user: { id: user._id, username: user.username },
     });
-
-    return res.status(200).json({ token, user: { id: user._id, username: user.username } });
   } catch (err) {
+    // ✅ Si une réponse a déjà été envoyée, on ne renvoie rien
+    if (res.headersSent) return;
+
     console.error('Erreur /login :', err);
     return res.status(500).json({ message: 'Erreur serveur' });
   }
 });
+
 
 module.exports = router;

@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import Welcome     from './pageAcceuil';
-import AddContact  from './addContact';
+import Welcome from './pageAcceuil';
+import AddContact from './addContact';
 import EditContact from './editContact';
+import Salles from './pageSalles';
 import './App.css';
 import carnetImg from './assets/carnet.png';
 
-const API_BASE = (
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) ||
-  process.env.REACT_APP_API_BASE ||
-  'https://authentification-fullstack.onrender.com'
-).replace(/\/+$/, '');
+// ✅ CRA (react-scripts) : utilise REACT_APP_API_BASE si tu déploies le front séparément.
+// Sinon (local avec proxy) => base = '' et on appelle /api/...
+const API_BASE = (process.env.REACT_APP_API_BASE || '').replace(/\/+$/, '');
+const apiUrl = (path) => (API_BASE ? `${API_BASE}${path}` : path);
 
 function Auth() {
   const [username, setUsername] = useState('');
@@ -19,13 +19,25 @@ function Auth() {
   const [msg, setMsg] = useState('');
   const navigate = useNavigate();
 
+  const saveAuthToStorage = (loginData, fallbackUsername) => {
+    if (loginData?.token) localStorage.setItem('token', loginData.token);
+
+    // ✅ prend id OU _id
+    const uid = loginData?.user?.id || loginData?.user?._id;
+    if (uid) localStorage.setItem('userId', uid);
+
+    localStorage.setItem('lastUsername', loginData?.user?.username || fallbackUsername);
+  };
+
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setMsg('Envoi...');
     const uname = username.trim();
 
     try {
-      const regRes = await fetch(`${API_BASE}/api/users/register`, {
+      // ✅ URL corrigée (proxy CRA)
+      const regRes = await fetch(apiUrl('/api/users/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: uname, password }),
@@ -40,7 +52,8 @@ function Auth() {
       }
       if (regRes.ok) setMsg(`✅ Utilisateur créé : ${regData.username}. Connexion...`);
 
-      const loginRes = await fetch(`${API_BASE}/api/users/login`, {
+      // ✅ URL corrigée (proxy CRA)
+      const loginRes = await fetch(apiUrl('/api/users/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: uname, password }),
@@ -54,8 +67,7 @@ function Auth() {
         return;
       }
 
-      if (loginData?.token) localStorage.setItem('token', loginData.token);
-      localStorage.setItem('lastUsername', loginData?.user?.username || uname);
+      saveAuthToStorage(loginData, uname);
 
       navigate('/pageAcceuil', { state: { username: loginData?.user?.username || uname } });
     } catch {
@@ -68,7 +80,7 @@ function Auth() {
     const uname = username.trim();
 
     try {
-      const res = await fetch(`${API_BASE}/api/users/login`, {
+      const res = await fetch(apiUrl('/api/users/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: uname, password }),
@@ -82,8 +94,7 @@ function Auth() {
         return;
       }
 
-      if (data?.token) localStorage.setItem('token', data.token);
-      localStorage.setItem('lastUsername', data?.user?.username || uname);
+      saveAuthToStorage(data, uname);
 
       navigate('/pageAcceuil', { state: { username: data?.user?.username || uname } });
     } catch {
@@ -142,7 +153,6 @@ function Auth() {
       </section>
     </main>
   );
-
 }
 
 export default function App() {
@@ -151,8 +161,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Auth />} />
         <Route path="/pageAcceuil" element={<Welcome />} />
-        <Route path="/addContact"  element={<AddContact />} />
+        <Route path="/addContact" element={<AddContact />} />
         <Route path="/editContact/:id" element={<EditContact />} />
+        <Route path="/salles" element={<Salles />} />
       </Routes>
     </BrowserRouter>
   );

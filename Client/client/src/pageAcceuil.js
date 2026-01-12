@@ -66,6 +66,10 @@ export default function Welcome() {
     navigate(`/editContact/${id}`);
   };
 
+  const handleGoToSalles = () => {
+    navigate('/salles');
+  };
+
 
   return (
     <main className="container">
@@ -79,10 +83,25 @@ export default function Welcome() {
         </div>
         <span className="brand-text">Mon carnet de contacts</span>
         <div className="actions">
-          <button onClick={handleAddContact} className="btn btn-primary">Ajouter un contact</button>
-          <button onClick={handleSeeContacts} className="btn">Voir mes contacts</button>
-          <button onClick={handleLogout} className="btn btn-ghost">Déconnexion</button>
+  <button onClick={handleAddContact} className="btn btn-primary">
+    Ajouter un contact
+  </button>
+
+  <button onClick={handleSeeContacts} className="btn">
+    Voir mes contacts
+  </button>
+
+  {/* ✅ NOUVEAU BOUTON */}
+  <button onClick={handleGoToSalles} className="btn">
+    Réserver une salle
+  </button>
+
+  <button onClick={handleLogout} className="btn btn-ghost">
+    Déconnexion
+  </button>
         </div>
+
+        
       </header>
 
       <section className="card">
