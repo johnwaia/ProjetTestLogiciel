@@ -1,0 +1,3 @@
+# Cypress artifacts
+cypress/videos/
+cypress/screenshots/
