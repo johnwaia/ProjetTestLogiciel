@@ -15,6 +15,14 @@ function toMin(t) {
 function clamp(x, a, b) {
   return Math.max(a, Math.min(b, x));
 }
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+function toHHmm(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${pad2(h)}:${pad2(m)}`;
+}
 
 export default function Salles() {
   const navigate = useNavigate();
@@ -24,7 +32,6 @@ export default function Salles() {
 
   const [selectedSalleId, setSelectedSalleId] = React.useState('');
   const [jour, setJour] = React.useState(() => {
-    // default today YYYY-MM-DD
     const d = new Date();
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -35,9 +42,8 @@ export default function Salles() {
   const [heureDebut, setHeureDebut] = React.useState('09:00');
   const [heureFin, setHeureFin] = React.useState('10:00');
 
-  // Disponibilités pour la salle sélectionnée et le jour
   const [freeSlots, setFreeSlots] = React.useState([]);
-  const [busySlots, setBusySlots] = React.useState([]); // [{debut, fin, username, reservatorId, reservationId}]
+  const [busySlots, setBusySlots] = React.useState([]); // [{_id, heure_debut, heure_fin, username, reservatorId}]
 
   React.useEffect(() => {
     if (!localStorage.getItem('token')) {
@@ -68,7 +74,6 @@ export default function Salles() {
       setSalles(Array.isArray(data) ? data : []);
       setMsg('');
 
-      // auto-select first
       if (!selectedSalleId && Array.isArray(data) && data.length) {
         setSelectedSalleId(data[0]._id || data[0].id);
       }
@@ -86,7 +91,6 @@ export default function Salles() {
       const data = await res.json().catch(() => null);
       if (!res.ok) return setMsg(`❌ ${data?.message || `Erreur ${res.status}`}`);
 
-      // attendu: { libres:[], reservations:[] }
       setFreeSlots(Array.isArray(data?.libres) ? data.libres : []);
       setBusySlots(Array.isArray(data?.reservations) ? data.reservations : []);
       setMsg('');
@@ -122,56 +126,147 @@ export default function Salles() {
     }
   };
 
-  // segments timeline
-  const buildSegments = () => {
-    const segs = [];
-
-    for (const f of freeSlots) segs.push({ type: 'free', debut: f.debut, fin: f.fin });
-    for (const b of busySlots) segs.push({ type: 'busy', debut: b.heure_debut || b.debut, fin: b.heure_fin || b.fin, username: b.username });
-
-    segs.sort((a, b) => toMin(a.debut) - toMin(b.debut));
-    return segs;
-  };
-
-  const renderTimeline = () => {
+  // ------- Emploi du temps (grille + blocs) -------
+  const renderEmploiDuTemps = () => {
     const startMin = toMin(START);
     const endMin = toMin(END);
     const total = endMin - startMin;
 
-    const segments = buildSegments();
+    // Grille: 30 minutes par ligne
+    const STEP = 30; // minutes
+    const rows = [];
+    for (let t = startMin; t <= endMin; t += STEP) rows.push(t);
+
+    // Hauteur totale (px) : 20px par demi-heure => 22 demi-heures pour 11h => ~440px
+    const PX_PER_STEP = 22;
+    const totalHeight = (rows.length - 1) * PX_PER_STEP;
+
+    // Blocs réservés en position absolue
+    const blocks = (busySlots || [])
+      .slice()
+      .sort((a, b) => toMin(a.heure_debut) - toMin(b.heure_debut))
+      .map((b) => {
+        const d = clamp(toMin(b.heure_debut), startMin, endMin);
+        const f = clamp(toMin(b.heure_fin), startMin, endMin);
+        const top = ((d - startMin) / total) * totalHeight;
+        const height = Math.max(28, ((f - d) / total) * totalHeight);
+
+        return {
+          id: b._id,
+          top,
+          height,
+          label: `${b.heure_debut}–${b.heure_fin}`,
+          username: b.username || '',
+        };
+      });
+
+    // Liste compacte des libres (optionnel)
+    const freeText =
+      Array.isArray(freeSlots) && freeSlots.length
+        ? freeSlots.map((x) => `${x.debut}–${x.fin}`).join(', ')
+        : 'Aucun créneau libre';
 
     return (
-      <div style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, overflow: 'hidden' }}>
-        {segments.map((seg, idx) => {
-          const a = clamp(toMin(seg.debut), startMin, endMin);
-          const b = clamp(toMin(seg.fin), startMin, endMin);
-          const h = Math.max(18, Math.round(((b - a) / total) * 260));
+      <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '260px 1fr', gap: 12 }}>
+        {/* Colonne info / libres */}
+        <div style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 12 }}>
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>Créneaux libres</div>
+          <div style={{ opacity: 0.85, lineHeight: 1.5 }}>{freeText}</div>
 
-          const isBusy = seg.type === 'busy';
+          <div style={{ marginTop: 12, opacity: 0.7, fontSize: 12 }}>
+            Astuce : choisis une heure de début/fin puis clique “Réserver”.
+          </div>
+        </div>
 
-          return (
-            <div
-              key={idx}
-              style={{
-                height: h,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 10px',
-                borderBottom: idx === segments.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.08)',
-                background: isBusy ? 'rgba(255, 0, 0, 0.12)' : 'rgba(0, 255, 0, 0.10)',
-              }}
-              title={`${seg.debut} → ${seg.fin}`}
-            >
-              <span style={{ fontWeight: 600 }}>
-                {isBusy ? 'Réservé' : 'Libre'} — {seg.debut} → {seg.fin}
-              </span>
-              <span style={{ opacity: isBusy ? 0.95 : 0.6 }}>
-                {isBusy ? (seg.username || '') : ''}
-              </span>
+        {/* Grille emploi du temps */}
+        <div style={{ border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+            <div style={{ fontWeight: 900 }}>Emploi du temps</div>
+            <div style={{ opacity: 0.8, fontSize: 13 }}>Plage: {START} → {END}</div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 10 }}>
+            {/* Colonne heures */}
+            <div style={{ position: 'relative', height: totalHeight }}>
+              {rows.map((t, idx) => {
+                const isHour = (t % 60) === 0;
+                const top = idx * PX_PER_STEP;
+                return (
+                  <div key={t} style={{ position: 'absolute', top: top - 7, left: 0, opacity: isHour ? 0.95 : 0.45, fontSize: 12 }}>
+                    {toHHmm(t)}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+
+            {/* Zone planning */}
+            <div style={{ position: 'relative', height: totalHeight }}>
+              {/* Grille horizontale */}
+              {rows.map((t, idx) => {
+                const isHour = (t % 60) === 0;
+                const top = idx * PX_PER_STEP;
+                return (
+                  <div
+                    key={t}
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top,
+                      height: 0,
+                      borderTop: isHour ? '1px solid rgba(255,255,255,0.18)' : '1px dashed rgba(255,255,255,0.10)',
+                    }}
+                  />
+                );
+              })}
+
+              {/* Fond "libre" */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'rgba(0, 255, 0, 0.04)',
+                  borderRadius: 10,
+                }}
+              />
+
+              {/* Blocs réservés */}
+              {blocks.map((b) => (
+                <div
+                  key={b.id}
+                  title={`${b.label} — ${b.username}`}
+                  style={{
+                    position: 'absolute',
+                    left: 8,
+                    right: 8,
+                    top: b.top,
+                    height: b.height,
+                    background: 'rgba(255, 0, 0, 0.18)',
+                    border: '1px solid rgba(255, 0, 0, 0.30)',
+                    borderRadius: 12,
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div style={{ fontWeight: 900 }}>Réservé</div>
+                  <div style={{ opacity: 0.95 }}>{b.label}</div>
+                  <div style={{ opacity: 0.85, fontSize: 12 }}>{b.username}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Légende */}
+          <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', fontSize: 13, opacity: 0.85 }}>
+            <span style={{ width: 12, height: 12, display: 'inline-block', background: 'rgba(0, 255, 0, 0.12)', border: '1px solid rgba(0,255,0,0.25)' }} />
+            Libre
+            <span style={{ width: 12, height: 12, display: 'inline-block', background: 'rgba(255, 0, 0, 0.18)', border: '1px solid rgba(255,0,0,0.30)', marginLeft: 10 }} />
+            Réservé
+          </div>
+        </div>
       </div>
     );
   };
@@ -185,7 +280,7 @@ export default function Salles() {
         <div className="brand">
           <img src={carnetImg} alt="Carnet" className="brand-logo" />
         </div>
-        <span className="brand-text">Réservation par salle (08:00–19:00)</span>
+        <span className="brand-text">Réservation par salle</span>
         <div className="actions">
           <button onClick={() => navigate(-1)} className="btn">Retour</button>
           <button onClick={fetchSalles} className="btn">Rafraîchir</button>
@@ -193,14 +288,14 @@ export default function Salles() {
       </header>
 
       <section className="card">
-        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             className="input"
             value={selectedSalleId}
             onChange={(e) => setSelectedSalleId(e.target.value)}
             style={{ maxWidth: 240 }}
           >
-            {salles.map(s => {
+            {salles.map((s) => {
               const id = s._id || s.id;
               return <option key={id} value={id}>{s.salleName}</option>;
             })}
@@ -236,9 +331,7 @@ export default function Salles() {
           </div>
         )}
 
-        <div style={{ marginTop: 14 }}>
-          {selectedSalleId ? renderTimeline() : <div className="msg">Choisis une salle pour voir ses disponibilités.</div>}
-        </div>
+        {selectedSalleId ? renderEmploiDuTemps() : <div className="msg" style={{ marginTop: 14 }}>Choisis une salle pour voir son emploi du temps.</div>}
       </section>
     </main>
   );
