@@ -1,25 +1,23 @@
 const mongoose = require('mongoose');
 
+const reservationSchema = new mongoose.Schema(
+  {
+    jour_choisi: { type: Date, required: true }, // jour (date à minuit)
+    heure_debut: { type: String, required: true, trim: true }, // HH:mm
+    heure_fin: { type: String, required: true, trim: true },   // HH:mm
+    reservator: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
+  },
+  { _id: true, timestamps: true }
+);
+
 const salleSchema = new mongoose.Schema(
   {
     salleName: { type: String, required: true, trim: true, minlength: 3, maxlength: 30 },
-
-    reservee: { type: Boolean, default: false },
-
-    // ID de l’utilisateur qui a réservé (ou null si pas réservé)
-    reservator: { type: mongoose.Schema.Types.ObjectId, ref: 'user', default: null },
-
-    // Jour choisi (format Date, recommandé)
-    jour_choisi: { type: Date, default: null },
-
-    // Heures au format "HH:mm"
-    heure_debut: { type: String, default: null, trim: true },
-    heure_fin: { type: String, default: null, trim: true },
+    reservations: { type: [reservationSchema], default: [] },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
-// helpers validation simple HH:mm
 function isHHmm(v) {
   return typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 }
@@ -27,31 +25,71 @@ function toMinutes(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
 }
+function toHHmm(minutes) {
+  const h = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const m = String(minutes % 60).padStart(2, '0');
+  return `${h}:${m}`;
+}
+const START_MIN = 8 * 60;  // 08:00
+const END_MIN = 19 * 60;   // 19:00
 
-salleSchema.pre('validate', function (next) {
-  if (this.reservee) {
-    // si réservé => champs obligatoires
-    if (!this.reservator) this.invalidate('reservator', 'reservator obligatoire si la salle est réservée.');
-    if (!this.jour_choisi) this.invalidate('jour_choisi', 'jour_choisi obligatoire si la salle est réservée.');
-    if (!this.heure_debut || !isHHmm(this.heure_debut)) this.invalidate('heure_debut', 'heure_debut doit être au format HH:mm.');
-    if (!this.heure_fin || !isHHmm(this.heure_fin)) this.invalidate('heure_fin', 'heure_fin doit être au format HH:mm.');
+function normalizeDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function sameDay(a, b) {
+  return normalizeDay(a).getTime() === normalizeDay(b).getTime();
+}
 
-    if (this.heure_debut && this.heure_fin && isHHmm(this.heure_debut) && isHHmm(this.heure_fin)) {
-      if (toMinutes(this.heure_debut) >= toMinutes(this.heure_fin)) {
-        this.invalidate('heure_fin', 'heure_fin doit être après heure_debut.');
-      }
+// Service pur (réutilisable routes/virtual)
+function computeFreeSlotsForDay(reservationsForDay) {
+  // reservationsForDay: [{ heure_debut, heure_fin }]
+  const busy = reservationsForDay
+    .filter(r => isHHmm(r.heure_debut) && isHHmm(r.heure_fin))
+    .map(r => ({ d: toMinutes(r.heure_debut), f: toMinutes(r.heure_fin) }))
+    .filter(x => x.d < x.f)
+    .sort((a, b) => a.d - b.d);
+
+  // merge overlaps
+  const merged = [];
+  for (const seg of busy) {
+    const d = Math.max(START_MIN, seg.d);
+    const f = Math.min(END_MIN, seg.f);
+    if (f <= START_MIN || d >= END_MIN) continue;
+
+    if (!merged.length || d > merged[merged.length - 1].f) {
+      merged.push({ d, f });
+    } else {
+      merged[merged.length - 1].f = Math.max(merged[merged.length - 1].f, f);
     }
-  } else {
-    // si pas réservé => tout remettre à null
-    this.reservator = null;
-    this.jour_choisi = null;
-    this.heure_debut = null;
-    this.heure_fin = null;
   }
-  next();
+
+  // compute free gaps
+  const free = [];
+  let cur = START_MIN;
+  for (const seg of merged) {
+    if (seg.d > cur) free.push({ debut: toHHmm(cur), fin: toHHmm(seg.d) });
+    cur = Math.max(cur, seg.f);
+  }
+  if (cur < END_MIN) free.push({ debut: toHHmm(cur), fin: toHHmm(END_MIN) });
+
+  return free;
+}
+
+// ✅ Virtual “service” : calcule les dispos restantes pour “aujourd’hui” (UTC/local)
+// (Pour un jour spécifique, on calcule plutôt dans la route avec query ?jour=YYYY-MM-DD)
+salleSchema.virtual('disponibilitesRestantesAujourdhui').get(function () {
+  const today = normalizeDay(new Date());
+  const dayRes = (this.reservations || []).filter(r => sameDay(r.jour_choisi, today));
+  return computeFreeSlotsForDay(dayRes);
 });
 
-// unique sur nom de salle
+// Index unique sur le nom de salle
 salleSchema.index({ salleName: 1 }, { unique: true });
 
 module.exports = mongoose.model('salle', salleSchema);
+
+// Export util si tu veux l'utiliser dans les routes (optionnel)
+module.exports.computeFreeSlotsForDay = computeFreeSlotsForDay;
+module.exports.normalizeDay = normalizeDay;
