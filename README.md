@@ -19,11 +19,11 @@ Application **fullstack MERN** EASYBOOKING permettant l’authentification des u
 
 > Ajoutez vos captures d’écran dans le dossier `screenshots/` puis référencez-les ici :
 
-```md
-![Connexion](docs/page_acceuil.png)
-![Accueil](docs/page_connexion.png)
-![Réservation](docs/page_reservation.png)
-```
+
+![Connexion](./docs/page_connexion.png)
+![Accueil](./docs/page_acceuil.png)
+![Réservation](./docs/page_reservation.png)
+
 
 ---
 
