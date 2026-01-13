@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import Welcome from './pageAcceuil';
-import AddContact from './addContact';
-import EditContact from './editContact';
 import Salles from './pageSalles';
 import './App.css';
 import carnetImg from './assets/carnet.png';
@@ -110,7 +108,7 @@ function Auth() {
       <section className="card" aria-label="Authentification">
         <img
           src={carnetImg}
-          alt="Carnet de contacts futuriste"
+          alt="Réservation de salles"
           className="login-illustration"
         />
 
@@ -161,8 +159,6 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Auth />} />
         <Route path="/pageAcceuil" element={<Welcome />} />
-        <Route path="/addContact" element={<AddContact />} />
-        <Route path="/editContact/:id" element={<EditContact />} />
         <Route path="/salles" element={<Salles />} />
       </Routes>
     </BrowserRouter>

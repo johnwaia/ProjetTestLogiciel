@@ -4,10 +4,8 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 const usersRoutes = require('./routes/users');
-const contactsRoutes = require('./routes/contacts');
 const sallesRoutes = require('./routes/salle');
 
-const Contact = require('./models/contact');
 const Salle = require('./models/salle');
 
 const app = express();
@@ -81,7 +79,6 @@ app.get('/', (_req, res) => res.send('API OK'));
 
 // Routes
 app.use('/api/users', usersRoutes);
-app.use('/api', contactsRoutes);
 app.use('/api', sallesRoutes);
 
 // Mongo
@@ -95,14 +92,6 @@ mongoose
   .connect(uri, { serverSelectionTimeoutMS: 7000 })
   .then(async () => {
     console.log('✅ MongoDB connecté');
-
-    try {
-      await Contact.syncIndexes();
-      await Salle.syncIndexes();
-      console.log('✅ Indexes synchronisés');
-    } catch (e) {
-      console.error('⚠️ Échec syncIndexes:', e?.message || e);
-    }
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 API sur http://localhost:${PORT}`);

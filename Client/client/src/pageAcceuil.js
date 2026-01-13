@@ -11,7 +11,6 @@ const API_BASE = (
 export default function Welcome() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [contacts, setContacts] = React.useState([]);
 
   React.useEffect(() => {
     if (!localStorage.getItem('token')) {
@@ -30,42 +29,6 @@ export default function Welcome() {
     navigate('/', { replace: true });
   };
 
-  const handleAddContact = () => {
-    navigate('/addContact');
-  };
-
-  const handleSeeContacts = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/api/contact`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error('Erreur lors de la récupération des contacts');
-      const data = await response.json();
-      setContacts(data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const handleDeleteContact = async (id) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE}/api/contact/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error('Erreur lors de la suppression du contact');
-      setContacts((prev) => prev.filter((contact) => (contact._id || contact.id) !== id));
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const handleEditContact = (id) => {
-    navigate(`/editContact/${id}`);
-  };
-
   const handleGoToSalles = () => {
     navigate('/salles');
   };
@@ -77,21 +40,13 @@ export default function Welcome() {
         <div className="brand">
           <img
             src={carnetImg}
-            alt="Carnet de contacts"
+            alt="Réservation de salles"
             className="brand-logo"
           />
         </div>
-        <span className="brand-text">Mon carnet de contacts</span>
+        <span className="brand-text">Mon carnet de réservation de salles</span>
         <div className="actions">
-  <button onClick={handleAddContact} className="btn btn-primary">
-    Ajouter un contact
-  </button>
 
-  <button onClick={handleSeeContacts} className="btn">
-    Voir mes contacts
-  </button>
-
-  {/* ✅ NOUVEAU BOUTON */}
   <button onClick={handleGoToSalles} className="btn">
     Réserver une salle
   </button>
@@ -100,48 +55,7 @@ export default function Welcome() {
     Déconnexion
   </button>
         </div>
-
-        
       </header>
-
-      <section className="card">
-        <div style={{marginBottom:8}}>Bienvenue, <strong>{username}</strong> !</div>
-
-        {contacts.length > 0 ? (
-          <div className="table-wrap" role="region" aria-label="Liste de contacts">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nom</th>
-                  <th>Prénom</th>
-                  <th>Téléphone</th>
-                  <th style={{width:180}}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contacts.map((c) => {
-                  const id = c._id || c.id;
-                  return (
-                    <tr key={id}>
-                      <td>{c.contactname}</td>
-                      <td>{c.contactFirstname}</td>
-                      <td>{c.contactPhone}</td>
-                      <td>
-                        <div className="actions">
-                          <button onClick={() => handleEditContact(id)} className="btn">Modifier</button>
-                          <button onClick={() => handleDeleteContact(id)} className="btn btn-danger">Supprimer</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="msg">Clique sur <em>“Voir mes contacts”</em> pour charger ta liste.</div>
-        )}
-      </section>
     </main>
   );
 }
